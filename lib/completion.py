@@ -1,11 +1,13 @@
 import os
 import io
 import re
+import imp
 import sys
 import json
 import traceback
 sys.path.append(os.path.dirname(__file__))
 import jedi
+from funcsigs import signature
 # remove jedi from path after we import it so it will not be completed
 sys.path.pop(0)
 
@@ -162,13 +164,25 @@ class JediCompletion(object):
             return []
         for completion in completions:
             if completion.parent().type == 'class':
-              _methods.append({
-                'name': completion.name,
-                'moduleName': completion.module_name,
-                'fileName': completion.module_path,
-                'line': completion.line,
-                'column': completion.column,
-              })
+                if completion.module_path is None or not os.path.exists(completion.module_path):
+                    sign = ''
+                else:
+                    try:
+                        module = imp.load_source(completion.module_name, completion.module_path)
+                        parent_class = getattr(module, completion.parent().name)
+                        parent_method = getattr(parent_class, completion.name)
+                        parent_signature = str(signature(parent_method)).replace('<', '').replace('>', '')
+                    except:
+                        sign = '(self)'
+                _methods.append({
+                    'parent_name': completion.parent().name,
+                    'name': completion.name,
+                    'moduleName': completion.module_name,
+                    'fileName': completion.module_path,
+                    'line': completion.line,
+                    'column': completion.column,
+                    'signature': parent_signature,
+                })
         return json.dumps({'id': identifier, 'results': _methods})
 
     def _serialize_arguments(self, script, identifier=None):
